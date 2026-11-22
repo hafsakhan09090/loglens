@@ -1,0 +1,331 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>LogLens</title>
+<style>
+  :root {
+    --bg: #eef1f5;
+    --panel: #ffffff;
+    --ink: #16212c;
+    --muted: #54657a;
+    --line: #d3dae2;
+    --data: #8aa0b8;
+    --alert: #b3203f;
+    --alert-soft: #f9e3e8;
+    --caution: #8a5a00;
+    --caution-soft: #fbefd2;
+    --ok: #1f6b4f;
+    --ok-soft: #dcf0e6;
+    --code-bg: #f6f8fa;
+    --sans: "Segoe UI", "Helvetica Neue", Arial, system-ui, sans-serif;
+    --mono: ui-monospace, "Cascadia Mono", Consolas, "Liberation Mono", monospace;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--ink); font: 15px/1.5 var(--sans); }
+  button, select, input { font: inherit; color: inherit; }
+  :focus-visible { outline: 2px solid #1d4ed8; outline-offset: 2px; }
+
+  header { background: var(--panel); border-bottom: 1px solid var(--line); padding: 14px 24px; display: flex; flex-wrap: wrap; gap: 12px 24px; align-items: center; justify-content: space-between; }
+  header h1 { margin: 0; font-size: 20px; font-weight: 700; letter-spacing: -0.01em; }
+  header .meta { color: var(--muted); font-size: 13px; }
+  .controls { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+  .controls select, .controls label.btn { border: 1px solid var(--line); background: var(--panel); border-radius: 6px; padding: 6px 12px; cursor: pointer; }
+  .controls label.btn { background: var(--ink); color: #fff; border-color: var(--ink); font-weight: 600; }
+  .controls input[type=file] { position: absolute; width: 1px; height: 1px; opacity: 0; }
+  .controls label.btn:focus-within { outline: 2px solid #1d4ed8; outline-offset: 2px; }
+
+  #status { padding: 0 24px; min-height: 22px; font-size: 13px; color: var(--muted); }
+  #status.error { color: var(--alert); }
+
+  main { display: grid; grid-template-columns: 300px minmax(0, 1fr); gap: 20px; padding: 8px 24px 40px; align-items: start; }
+  @media (max-width: 860px) { main { grid-template-columns: 1fr; } }
+
+  .panel { background: var(--panel); border: 1px solid var(--line); border-radius: 8px; }
+  .panel h2 { margin: 0; font-size: 15px; font-weight: 700; padding: 14px 16px 0; }
+
+  #incident-list { list-style: none; margin: 0; padding: 8px; }
+  #incident-list button { width: 100%; text-align: left; background: none; border: 1px solid transparent; border-radius: 6px; padding: 10px 10px; cursor: pointer; display: block; }
+  #incident-list button:hover { background: var(--bg); }
+  #incident-list button[aria-current="true"] { background: var(--alert-soft); border-color: #e9b6c2; }
+  .inc-title { font-weight: 600; display: flex; justify-content: space-between; gap: 8px; }
+  .inc-sub { color: var(--muted); font-size: 13px; margin-top: 2px; }
+  .inc-cause { font-size: 13px; margin-top: 4px; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+
+  .chip { display: inline-block; font-size: 12px; font-weight: 600; padding: 1px 8px; border-radius: 10px; white-space: nowrap; }
+  .sev-critical, .sev-high { background: var(--alert-soft); color: var(--alert); }
+  .sev-medium { background: var(--caution-soft); color: var(--caution); }
+  .sev-low { background: var(--ok-soft); color: var(--ok); }
+  .conf-high { background: var(--ok-soft); color: var(--ok); }
+  .conf-medium { background: var(--caution-soft); color: var(--caution); }
+  .conf-low { background: #e7ebf0; color: var(--muted); }
+
+  .timeline-wrap { padding: 8px 16px 14px; }
+  .timeline-note { color: var(--muted); font-size: 13px; padding: 4px 16px 0; margin: 0; }
+  #timeline { width: 100%; display: block; }
+  #timeline .bar { cursor: pointer; }
+
+  #detail { margin-top: 20px; }
+  .detail-head { padding: 16px; border-bottom: 1px solid var(--line); display: flex; flex-wrap: wrap; justify-content: space-between; gap: 8px 16px; align-items: baseline; }
+  .detail-head h2 { padding: 0; font-size: 18px; }
+  .detail-head .when { color: var(--muted); font-size: 14px; }
+  .section { padding: 16px; border-bottom: 1px solid var(--line); }
+  .section:last-child { border-bottom: 0; }
+  .section h3 { margin: 0 0 6px; font-size: 14px; font-weight: 700; }
+  .cause { font-size: 17px; font-weight: 600; line-height: 1.4; margin: 0; max-width: 70ch; }
+  .prose { margin: 0; max-width: 70ch; }
+  .tags { display: flex; gap: 6px; margin-top: 10px; }
+
+  .evidence { margin: 0; padding: 0; list-style: none; font: 13px/1.5 var(--mono); background: var(--code-bg); border: 1px solid var(--line); border-radius: 6px; overflow-x: auto; }
+  .evidence li { display: grid; grid-template-columns: 64px 54px minmax(0, 1fr) auto; gap: 8px; padding: 3px 10px 3px 8px; border-left: 3px solid transparent; white-space: nowrap; }
+  .evidence li.cited { border-left-color: var(--alert); background: var(--alert-soft); }
+  .evidence .ln { color: var(--muted); text-align: right; }
+  .evidence .lv-ERROR { color: var(--alert); font-weight: 700; }
+  .evidence .lv-WARN { color: var(--caution); font-weight: 700; }
+  .evidence .lv-INFO { color: var(--muted); }
+  .evidence .tag { color: var(--alert); font-weight: 700; }
+
+  table { border-collapse: collapse; width: 100%; font-size: 14px; }
+  th, td { text-align: left; padding: 6px 8px; border-bottom: 1px solid var(--line); vertical-align: top; }
+  th { font-weight: 600; color: var(--muted); font-size: 13px; }
+  td.num { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
+  td.tpl { font-family: var(--mono); font-size: 13px; word-break: break-word; }
+  ul.actions { margin: 0; padding-left: 20px; }
+  ul.actions li { margin: 2px 0; max-width: 70ch; }
+  .notes { color: var(--caution); font-size: 13px; margin-top: 8px; }
+  .footnote { color: var(--muted); font-size: 13px; margin: 0; }
+
+  .empty { padding: 40px 24px; text-align: center; color: var(--muted); }
+  .empty code { background: var(--code-bg); border: 1px solid var(--line); border-radius: 4px; padding: 1px 6px; font-family: var(--mono); font-size: 13px; }
+</style>
+</head>
+<body>
+<header>
+  <div>
+    <h1>LogLens</h1>
+    <div class="meta" id="meta">No report loaded</div>
+  </div>
+  <div class="controls">
+    <label for="provider" class="meta">Analysis by</label>
+    <select id="provider" aria-label="Analysis provider">
+      <option value="rules">Rules (offline baseline)</option>
+      <option value="openai">LLM: OpenAI-compatible</option>
+      <option value="anthropic">LLM: Anthropic</option>
+    </select>
+    <label class="btn">Analyze a log file<input type="file" id="file" accept=".log,.txt,text/plain"></label>
+  </div>
+</header>
+<div id="status" role="status" aria-live="polite"></div>
+<main id="app"></main>
+
+<script>
+(function () {
+  var state = { report: null, selected: null };
+  var app = document.getElementById("app");
+  var statusEl = document.getElementById("status");
+
+  function esc(value) {
+    return String(value).replace(/[&<>"']/g, function (c) {
+      return { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c];
+    });
+  }
+  function hhmm(iso) { return iso.slice(11, 16); }
+  function day(iso) { return iso.slice(0, 10); }
+  function dur(seconds) {
+    var m = Math.round(seconds / 60);
+    return m < 60 ? m + " min" : Math.floor(m / 60) + " h " + (m % 60) + " min";
+  }
+  function setStatus(text, isError) {
+    statusEl.textContent = text || "";
+    statusEl.className = isError ? "error" : "";
+  }
+
+  function load() {
+    fetch("/api/report").then(function (r) {
+      if (!r.ok) throw new Error("none");
+      return r.json();
+    }).then(function (report) { setReport(report); }).catch(function () { renderEmpty(); });
+  }
+
+  function setReport(report) {
+    state.report = report;
+    state.selected = report.incidents.length ? report.incidents[0].id : null;
+    var m = report.meta;
+    document.getElementById("meta").textContent =
+      m.source + ": " + m.parsed_records.toLocaleString() + " log lines, " + m.distinct_templates +
+      " message patterns, " + report.incidents.length + " incident" + (report.incidents.length === 1 ? "" : "s") +
+      ". Analysis by " + m.provider + " (" + m.model + "), prompt " + m.prompt_version + ".";
+    render();
+  }
+
+  function renderEmpty() {
+    app.innerHTML = '<div class="panel empty" style="grid-column:1/-1">' +
+      '<p>No report loaded yet.</p>' +
+      '<p>Run <code>python -m loglens analyze data/sample.log</code> and reload, or choose a log file above.</p>' +
+      '<p>Expected line format: <code>2026-11-20 08:55:03 ERROR db-pool: message</code></p></div>';
+  }
+
+  function render() {
+    var r = state.report;
+    if (!r) return renderEmpty();
+    var html = '<aside class="panel" aria-label="Incidents"><h2>Incidents</h2><ul id="incident-list">';
+    if (!r.incidents.length) {
+      html += '<li class="empty">No anomalies found in this log.</li>';
+    }
+    r.incidents.forEach(function (inc) {
+      var a = inc.analysis;
+      html += '<li><button type="button" data-id="' + esc(inc.id) + '"' +
+        (inc.id === state.selected ? ' aria-current="true"' : '') + '>' +
+        '<div class="inc-title"><span>' + esc(inc.id) + ', ' + hhmm(inc.start) + ' to ' + hhmm(inc.end) + '</span>' +
+        '<span class="chip sev-' + esc(a.severity) + '">' + esc(a.severity) + '</span></div>' +
+        '<div class="inc-sub">' + dur(inc.duration_seconds) + ', peak score ' + inc.peak_z + '</div>' +
+        '<div class="inc-cause">' + esc(a.root_cause) + '</div></button></li>';
+    });
+    html += '</ul></aside><section><div class="panel"><h2>Activity timeline</h2>' +
+      '<p class="timeline-note">Each bar is one ' + (r.meta.window_seconds / 60) + '-minute window of warnings and errors. Red bars were flagged as anomalous. Select a bar or an incident for details.</p>' +
+      '<div class="timeline-wrap"><svg id="timeline" role="img" aria-label="Severity per time window"></svg></div></div>' +
+      '<div class="panel" id="detail"></div></section>';
+    app.innerHTML = html;
+    app.querySelectorAll("#incident-list button").forEach(function (b) {
+      b.addEventListener("click", function () { select(b.getAttribute("data-id")); });
+    });
+    drawTimeline();
+    renderDetail();
+  }
+
+  function select(id) {
+    state.selected = id;
+    app.querySelectorAll("#incident-list button").forEach(function (b) {
+      if (b.getAttribute("data-id") === id) b.setAttribute("aria-current", "true");
+      else b.removeAttribute("aria-current");
+    });
+    drawTimeline();
+    renderDetail();
+  }
+
+  function selectedIncident() {
+    if (!state.report) return null;
+    return state.report.incidents.filter(function (i) { return i.id === state.selected; })[0] || null;
+  }
+
+  function drawTimeline() {
+    var svg = document.getElementById("timeline");
+    if (!svg) return;
+    var tl = state.report.timeline;
+    var width = svg.parentNode.clientWidth || 700, height = 150;
+    var padL = 6, padR = 6, padT = 14, padB = 22;
+    var plotW = width - padL - padR, plotH = height - padT - padB;
+    var bw = plotW / Math.max(tl.length, 1);
+    var maxSev = Math.max.apply(null, tl.map(function (w) { return w.severity; }).concat([1]));
+    var sel = selectedIncident();
+    svg.setAttribute("viewBox", "0 0 " + width + " " + height);
+    svg.setAttribute("height", height);
+    var out = "";
+    if (sel) {
+      var i0 = 0, i1 = 0;
+      tl.forEach(function (w, i) {
+        if (w.start >= sel.start && w.start < sel.end) { if (!i0) i0 = i; i1 = i; }
+      });
+      out += '<rect x="' + (padL + i0 * bw - 2) + '" y="0" width="' + ((i1 - i0 + 1) * bw + 4) +
+        '" height="' + (height - padB) + '" fill="#b3203f" opacity="0.10"></rect>';
+    }
+    tl.forEach(function (w, i) {
+      var h = Math.max(1.5, Math.sqrt(w.severity / maxSev) * plotH);
+      var x = padL + i * bw;
+      out += '<rect class="bar" data-start="' + esc(w.start) + '" x="' + x.toFixed(2) + '" y="' + (padT + plotH - h).toFixed(2) +
+        '" width="' + Math.max(bw - 0.6, 0.6).toFixed(2) + '" height="' + h.toFixed(2) + '" fill="' +
+        (w.anomalous ? "#b3203f" : "#8aa0b8") + '"><title>' + esc(hhmm(w.start)) + ": " + w.errors + " errors, " + w.warns + " warnings" + '</title></rect>';
+    });
+    var stepBars = Math.max(1, Math.round(1800 / state.report.meta.window_seconds));
+    tl.forEach(function (w, i) {
+      if (i % stepBars === 0) {
+        out += '<text x="' + (padL + i * bw) + '" y="' + (height - 6) + '" font-size="11" fill="#54657a">' + hhmm(w.start) + '</text>';
+      }
+    });
+    out += '<line x1="' + padL + '" x2="' + (width - padR) + '" y1="' + (padT + plotH) + '" y2="' + (padT + plotH) + '" stroke="#d3dae2"></line>';
+    svg.innerHTML = out;
+    svg.querySelectorAll(".bar").forEach(function (bar) {
+      bar.addEventListener("click", function () {
+        var start = bar.getAttribute("data-start");
+        var hit = state.report.incidents.filter(function (inc) { return start >= inc.start && start < inc.end; })[0];
+        if (hit) select(hit.id);
+      });
+    });
+  }
+
+  function renderDetail() {
+    var el = document.getElementById("detail");
+    var inc = selectedIncident();
+    if (!inc) { el.innerHTML = '<div class="empty">Nothing to show. Choose a log with errors or warnings.</div>'; return; }
+    var a = inc.analysis, meta = inc.analysis_meta;
+    var cited = {};
+    a.evidence_lines.forEach(function (n) { cited[n] = true; });
+
+    var html = '<div class="detail-head"><h2>' + esc(inc.id) + ': ' + esc(day(inc.start)) + ', ' + hhmm(inc.start) + ' to ' + hhmm(inc.end) + '</h2>' +
+      '<span class="when">' + dur(inc.duration_seconds) + ', ' + (inc.level_counts.ERROR || 0) + ' errors, ' + (inc.level_counts.WARN || 0) + ' warnings</span></div>';
+
+    html += '<div class="section"><h3>Most likely cause</h3><p class="cause">' + esc(a.root_cause) + '</p>' +
+      '<div class="tags"><span class="chip sev-' + esc(a.severity) + '">Severity: ' + esc(a.severity) + '</span>' +
+      '<span class="chip conf-' + esc(a.confidence) + '">Confidence: ' + esc(a.confidence) + '</span></div></div>';
+
+    html += '<div class="section"><h3>What happened</h3><p class="prose">' + esc(a.summary) + '</p></div>';
+
+    html += '<div class="section"><h3>Evidence</h3><ul class="evidence">';
+    inc.evidence.forEach(function (e) {
+      html += '<li' + (cited[e.line] ? ' class="cited"' : '') + '><span class="ln">L' + e.line + '</span>' +
+        '<span class="lv-' + esc(e.level) + '">' + esc(e.level) + '</span>' +
+        '<span>' + esc(e.component) + ': ' + esc(e.text) + '</span>' +
+        '<span class="tag">' + (cited[e.line] ? 'cited' : '') + '</span></li>';
+    });
+    html += '</ul><p class="footnote" style="margin-top:8px">Highlighted lines are the ones the analysis cites. Citations that do not match a line shown here are removed automatically.</p></div>';
+
+    html += '<div class="section"><h3>Most frequent warning and error patterns</h3><table><thead><tr><th>Count</th><th>Level</th><th>Pattern</th><th>First seen</th></tr></thead><tbody>';
+    inc.top_templates.forEach(function (t) {
+      html += '<tr><td class="num">' + t.count + '</td><td>' + esc(t.level) + '</td><td class="tpl">' + esc(t.component) + ': ' + esc(t.template) +
+        '</td><td>' + (t.novel ? 'In this incident' : 'Earlier') + '</td></tr>';
+    });
+    html += '</tbody></table></div>';
+
+    if (a.recommended_actions.length) {
+      html += '<div class="section"><h3>Suggested next steps</h3><ul class="actions">' +
+        a.recommended_actions.map(function (x) { return '<li>' + esc(x) + '</li>'; }).join('') + '</ul></div>';
+    }
+
+    var notes = meta.issues.length ? '<div class="notes">Checks: ' + esc(meta.issues.join('; ')) + '</div>' : '';
+    html += '<div class="section"><p class="footnote">Analysis by ' + esc(meta.provider) + ' (' + esc(meta.model) + '), prompt ' + esc(meta.prompt_version) +
+      ', ' + meta.attempts + ' attempt' + (meta.attempts === 1 ? '' : 's') + (meta.fallback_used ? ', fell back to rules' : '') + '.</p>' + notes + '</div>';
+    el.innerHTML = html;
+  }
+
+  document.getElementById("file").addEventListener("change", function (ev) {
+    var file = ev.target.files[0];
+    if (!file) return;
+    var provider = document.getElementById("provider").value;
+    setStatus("Analyzing " + file.name + "...", false);
+    file.text().then(function (text) {
+      return fetch("/api/analyze?provider=" + encodeURIComponent(provider), { method: "POST", body: text });
+    }).then(function (r) {
+      return r.json().then(function (body) { return { ok: r.ok, body: body }; });
+    }).then(function (res) {
+      if (!res.ok) throw new Error(res.body.error || "Analysis failed");
+      res.body.meta.source = file.name;
+      setReport(res.body);
+      setStatus("Done: " + res.body.incidents.length + " incident(s) found in " + file.name + ".", false);
+    }).catch(function (err) {
+      setStatus(err.message, true);
+    });
+    ev.target.value = "";
+  });
+
+  var resizeTimer;
+  window.addEventListener("resize", function () {
+    clearTimeout(resizeTimer);
+    resizeTimer = setTimeout(function () { if (state.report) drawTimeline(); }, 120);
+  });
+
+  load();
+})();
+</script>
+</body>
+</html>
