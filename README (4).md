@@ -15,7 +15,6 @@ LogLens reads application logs, finds the time windows where something went wron
 - [Project layout](#project-layout)
 - [Design decisions](#design-decisions)
 - [Limitations](#limitations)
-- [Next steps](#next-steps)
 
 ## Why this exists
 
@@ -220,16 +219,3 @@ loglens/
 - The whole file is read into memory. There is no streaming.
 - The server is a minimal development server with no authentication. Do not expose it to a network.
 - Evaluated only on synthetic data so far.
-
-## Next steps
-
-- Evaluate on public labelled log datasets such as the LogHub collection.
-- Compare several models and prompt versions, and store each run in `results/`.
-- Retrieve similar past incidents and runbooks to give the model more context.
-- Streaming ingestion with a persistent baseline.
-- Rebuild the dashboard in React on top of a FastAPI backend.
-
-## Author
-
-Hafsa Khan, B.Tech Computer Science and Engineering (class of 2027).
-[GitHub](https://github.com/hafsakhan09090) · [LinkedIn](https://www.linkedin.com/in/-h-a-f-s-a-/)
